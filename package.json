@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "counter.js",
-  
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -11,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "chalk": "^5.0.0",
+    "glob": "^7.2.0",
     "minimist": "^1.2.5"
   }
 }
