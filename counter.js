@@ -2,67 +2,68 @@ const minimist = require("minimist");
 const fs = require("fs");
 const path = require("path");
 
-const allowedExt = ["js", "py", "c", "cpp"];
-const excludedDirs = ["node_modules", "venv", 'x64', 'SDL2-2.0.18'];
+const options = {
+  allowedExt: ["js", "py", "c", "cpp"],
+  excludedDirs: ["node_modules", "venv", "x64", "SDL2-2.0.18"],
+  rootDir: ''
+}
 
-const checkIncludedItems = (name, items) => {
-  let allowed = false
+const checkIncludedItems = (items, predicate) => {
+  let allowed = false;
   items.forEach((orig_name) => {
-    if (name.includes(orig_name)) {
-      allowed =  true;
+    if (predicate(orig_name)) {
+      allowed = true;
     }
   });
   return allowed;
 };
 
-const isHiddenFolder = (_path) => {
-  let hidden = false;
-  _path.split("\\").forEach((item) => {
-    if (item.match(/^\./)) {
-      hidden = true;
+const isHiddenFolder = (_path) => checkIncludedItems(_path.split("\\"), (name) => name.match(/^\./));
+const isExDir = (_path) => checkIncludedItems(options.excludedDirs, (name) => _path.includes(name))
+const isAllowExt = (_path) => checkIncludedItems(options.allowedExt, (name) => name === path.parse(_path).ext.substring(1))
+
+const searchSourceFiles = (_path, files) => {
+  fs.readdirSync(_path).forEach((file) => {
+    const absolute = path.join(_path, file);
+    if (fs.statSync(absolute).isDirectory()) {
+      if (!isExDir(absolute)) {
+        return searchSourceFiles(absolute, files);
+      }
+    } else {
+      if (!isHiddenFolder(absolute) && isAllowExt(absolute)) {
+        files.push(absolute);
+      }
     }
   });
-  return hidden;
 };
 
-const countLineInFile = async (file) => {
-  files = [];
-  const searchSourceFiles = (_path) => {
-    fs.readdirSync(_path).forEach((file) => {
-      const absolute = path.join(_path, file);
-      if (fs.statSync(absolute).isDirectory() ) {
-        if (!checkIncludedItems(absolute, excludedDirs)) {
-          
-          return searchSourceFiles(absolute);
-        }
-      } else {
-        if (!isHiddenFolder(absolute)) {
-          files.push(absolute);
-        }
-      }
-    });
-  };
-
-  searchSourceFiles(file);
-
-  files.forEach((file) => {
-    lines = 0;
-
-    console.log(file);
+const countLineInFile = (file_info) => {
+  return file_info.map((file) => {
+    lines = {blank: 0, code: 0};
 
     fs.readFileSync(file, "utf-8")
       .split("\n")
       .forEach((line) => {
-        lines += 1;
+        if (line === '') {
+          lines.blank += 1
+        }
+        lines.code += 1;
       });
-    console.log(lines);
+
+    return { dir: file, lines: lines }
   });
 };
+
+const parseArgList = (args) => {
+  return args.includes(',') ? args.split(',') : [args]
+}
 
 const validateArgs = (args) => {
   if ("dir" in args) {
     if (path.isAbsolute(args.dir)) {
-      countLineInFile(args.dir);
+      options.rootDir = args.dir
+      options.excludedDirs = parseArgList(args.e.replaceAll(' ', ''))
+      options.allowedExt = parseArgList(args.a.replaceAll(' ', ''))
     } else {
       console.log("Path not absolute");
     }
@@ -71,4 +72,12 @@ const validateArgs = (args) => {
   }
 };
 
-validateArgs(minimist(process.argv.slice(2)));
+const counter = () => {
+  validateArgs(minimist(process.argv.slice(2)));
+  let files = []
+  searchSourceFiles(options.rootDir, files);
+  files = countLineInFile(files)
+  console.log(files);
+}
+
+counter()
