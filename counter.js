@@ -3,9 +3,9 @@ const fs = require("fs");
 const path = require("path");
 
 const options = {
-  allowedExt: ["js", "py", "c", "cpp"],
-  excludedDirs: ["node_modules", "venv", "x64", "SDL2-2.0.18"],
-  rootDir: ''
+  allowedExt: [],
+  excludedDirs: [],
+  rootDir: '',
 }
 
 const checkIncludedItems = (items, predicate) => {
@@ -37,25 +37,61 @@ const searchSourceFiles = (_path, files) => {
   });
 };
 
-const countLineInFile = (file_info) => {
+const parseFiles = (file_info) => {
   return file_info.map((file) => {
-    lines = {blank: 0, code: 0};
-
+    lines = 0;
     fs.readFileSync(file, "utf-8")
       .split("\n")
       .forEach((line) => {
-        if (line === '') {
-          lines.blank += 1
+        if (line !== '') {
+          lines += 1;
         }
-        lines.code += 1;
       });
 
-    return { dir: file, lines: lines }
+    return { dir: file, lines: lines, date: fs.statSync(file).mtime.toLocaleDateString() }
   });
 };
 
 const parseArgList = (args) => {
   return args.includes(',') ? args.split(',') : [args]
+}
+
+const countTotalLineByExt = (files) => {
+  totalLineByExt = {}
+  files.forEach(file => {
+    const ext = path.parse(file.dir).ext
+    if (ext in totalLineByExt) {
+      totalLineByExt[ext] += file.lines
+    } else {
+      totalLineByExt[ext] = file.lines
+    }
+  })
+  return totalLineByExt
+}
+
+const formatDict = (dict) => {
+  let string = ''
+  Object.keys(dict).forEach(item => {
+    string += '{'
+    string += `${item} ${dict[item]}`
+    string += '}'
+
+  })
+  return string
+}
+
+const saveReport = (files) => {
+  totalLineByExt = countTotalLineByExt(files)
+  let report = fs.createWriteStream('report.txt', { flags: 'a' })
+  files.forEach(file => {
+    Object.keys(file).forEach(key => {
+      report.write(`${key}:${file[key]}\n`)
+    })
+    report.write('\n')
+  })
+  report.write(`total lines by extension: ${formatDict(totalLineByExt)}\n`)
+  report.write(`total lines: ${Object.values(totalLineByExt).reduce((x, y) => x + y)}`)
+  report.end()
 }
 
 const validateArgs = (args) => {
@@ -76,8 +112,9 @@ const counter = () => {
   validateArgs(minimist(process.argv.slice(2)));
   let files = []
   searchSourceFiles(options.rootDir, files);
-  files = countLineInFile(files)
-  console.log(files);
+  files = parseFiles(files)
+
+  saveReport(files)
 }
 
 counter()
